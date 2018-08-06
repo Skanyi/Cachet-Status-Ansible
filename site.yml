@@ -1,0 +1,6 @@
+---
+- hosts: cachetserver
+  remote_user: vagrant
+  become: yes
+  roles:
+    - cachet

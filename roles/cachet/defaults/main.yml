@@ -1,0 +1,5 @@
+---
+# defaults file for cachet
+cachet_mysql_db: cachet
+cachet_mysql_user: cachetuser
+cachet_mysql_pass: cachet_pass

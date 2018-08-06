@@ -1,0 +1,109 @@
+---
+# tasks file for cachet
+- name: Update Software Packages 
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install cachet dependancies
+  apt:
+    name: "{{ item }}"
+    state: present
+  with_items:
+    - curl
+    - git
+    - apache2
+    - php5
+    - libapache2-mod-php5
+    - php5-gd 
+    - php5-apcu
+    - php5-mcrypt
+    - mysql-server
+    - mysql-client
+    - python-mysqldb
+    - php5-mysql
+
+- name: Download Composer
+  command: curl -sS https://getcomposer.org/installer
+
+- name: Install Composer
+  command: php -- --install-dir=/usr/local/bin --filename=composer
+
+- name: Git clone the Repo
+  git:
+    repo: https://github.com/cachethq/Cachet.git
+    dest: /var/www/cachet
+    version: v2.2.2
+    force: yes
+
+- name: Install PHP Dependancies with Composer
+  composer:
+    command: install
+    working_dir: /var/www/cachet
+
+- name: Create Mysql Database
+  mysql_db:
+    name: "{{ cachet_mysql_db }}"
+    state: present
+
+- name: Create Mysql User
+  mysql_user:
+    name: "{{ cachet_mysql_user }}"
+    password: "{{ cachet_mysql_pass }}"
+    priv: '*.*:ALL'
+    state: present
+
+- name: Copy the .env example
+  command: mv /var/www/cachet/.env.example /var/www/cachet/.env   
+
+- name: Modify the .env file
+  lineinfile:
+    path: /var/www/cachet/.env
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  with_items:
+    - {'regexp': "APP_URL=http://localhost", 'line': "APP_URL=http://status.kanyi.cf"}
+    - {'regexp': "DB_USERNAME=homestead", 'line': "DB_USERNAME={{ cachet_mysql_user }}"}
+    - {'regexp': "DB_PASSWORD=secret", 'line': "DB_PASSWORD={{ cachet_mysql_pass }}"} 
+
+- name: Generate key
+  command: php artisan key:generate
+  args:
+    chdir: /var/www/cachet/
+
+- name: Clear config
+  command: php artisan config:clear
+  args:
+    chdir: /var/www/cachet/
+
+- name: Migrate DB
+  command: php artisan migrate
+  args:
+    chdir: /var/www/cachet/
+
+- name: Install the app\cachet
+  command: php artisan app:install
+  args:
+    chdir: /var/www/cachet/
+
+- name: Configure Apache HTTP Server
+  template:
+    src: templates/cachet.conf
+    dest: /etc/apache2/sites-available/000-default.conf 
+
+- name: Change mode of .env file
+  file:
+    path: "{{ item }}"
+    mode: 0777
+  with_items:
+    - /var/www/cachet/.env
+    - /var/www/cachet/storage
+    - /var/www/cachet/database
+    - /var/www/cachet/bootstrap/cache
+
+- name: Enable Apache rewrite mode
+  apache2_module:
+    state: present
+    name: rewrite
+  notify:
+    - restart apache
